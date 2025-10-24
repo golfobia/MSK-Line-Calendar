@@ -23,7 +23,7 @@ HTML
     <script>
         // --- 3. ตั้งค่าตัวแปรหลัก (ใส่ค่าของคุณ) ---
         const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbx_QaBBxWkzTUjWbVcRibjMoOwkaWfkwP9QPFSC-rfQSKW_0hUATyWqRFfPKJgleg21/exec"; 
-        const LIFF_ID = "YOUR_LIFF_ID_HERE";
+        const LIFF_ID = "2008349931-Xx4dDBDZ";
         
         let currentUserId = null;
         let calendar;
