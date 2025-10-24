@@ -1,0 +1,151 @@
+HTML
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ปฏิทินแผนงาน (แก้ไขได้)</title>
+    
+    <link href='https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.css' rel='stylesheet' />
+    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.js'></script>
+    
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    
+    <style>
+        body, html { margin: 0; padding: 8px; font-family: Arial, sans-serif; }
+        #calendar { max-width: 1200px; margin: 0 auto; }
+        /* (เพิ่มสไตล์ CSS ให้สวยงามได้ตามต้องการ) */
+    </style>
+</head>
+<body>
+    <div id='calendar'></div>
+
+    <script>
+        // --- 3. ตั้งค่าตัวแปรหลัก (ใส่ค่าของคุณ) ---
+        const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbx_QaBBxWkzTUjWbVcRibjMoOwkaWfkwP9QPFSC-rfQSKW_0hUATyWqRFfPKJgleg21/exec"; 
+        const LIFF_ID = "YOUR_LIFF_ID_HERE";
+        
+        let currentUserId = null;
+        let calendar;
+
+        // --- 4. เริ่มต้น LIFF และยืนยันตัวตน ---
+        async function initializeLiff() {
+            try {
+                await liff.init({ liffId: LIFF_ID });
+                if (!liff.isLoggedIn()) {
+                    liff.login(); // ถ้ายังไม่ล็อกอิน ให้ไปหน้าล็อกอิน
+                    return;
+                }
+                const profile = await liff.getProfile();
+                currentUserId = profile.userId; // เก็บ UserID ไว้เช็กสิทธิ์
+                
+                // เมื่อยืนยันตัวตนสำเร็จ ค่อยวาดปฏิทิน
+                initializeCalendar(); 
+            } catch (err) {
+                console.error(err);
+                alert("เกิดข้อผิดพลาดในการยืนยันตัวตนกับ LINE");
+            }
+        }
+
+        // --- 5. วาดปฏิทิน (FullCalendar) ---
+        function initializeCalendar() {
+            var calendarEl = document.getElementById('calendar');
+            calendar = new FullCalendar.Calendar(calendarEl, {
+                
+                initialView: 'dayGridMonth',
+                headerToolbar: {
+                    left: 'prev,next today',
+                    center: 'title',
+                    right: 'dayGridMonth,timeGridWeek,timeGridDay'
+                },
+
+                // --- 6. เปิดโหมดแก้ไข ---
+                editable: true,     // ลากได้
+                selectable: true,     // เลือกวันว่างได้
+                
+                // --- 7. โหลดข้อมูลจากหลังบ้าน (doGet) ---
+                events: WEB_APP_URL, 
+
+                // --- 8. Event Handler (เมื่อผู้ใช้กระทำ) ---
+                
+                // เมื่อ "คลิกเลือกวันว่าง" (สร้างใหม่)
+                select: function(selectionInfo) {
+                    let title = prompt('กรุณาใส่ชื่องาน:');
+                    if (title) {
+                        sendDataToBackend("create", {
+                            title: title,
+                            start: selectionInfo.startStr,
+                            end: selectionInfo.endStr
+                        });
+                    }
+                    calendar.unselect();
+                },
+
+                // เมื่อ "ลากไปวาง" (อัปเดตเวลา)
+                eventDrop: function(dropInfo) {
+                    sendDataToBackend("update", {
+                        rowId: dropInfo.event.extendedProps.rowId, // ID แถว (สำคัญมาก)
+                        title: dropInfo.event.title,
+                        start: dropInfo.event.startStr,
+                        end: dropInfo.event.endStr || ''
+                    });
+                },
+
+                // เมื่อ "คลิกที่ตัวงาน" (ดูรายละเอียด/ลบ)
+                eventClick: function(clickInfo) {
+                    let title = clickInfo.event.title;
+                    let desc = clickInfo.event.extendedProps.description || 'ไม่มีรายละเอียด';
+                    let loc = clickInfo.event.extendedProps.location || 'ไม่ระบุสถานที่';
+
+                    let action = prompt(
+                        `งาน: ${title}\nที่: ${loc}\nรายละเอียด: ${desc}\n\nพิมพ์ "ลบ" เพื่อลบงานนี้:`
+                    );
+
+                    if (action === "ลบ" || action === "delete") {
+                        if (confirm(`ยืนยันการลบงาน: ${title}?`)) {
+                            sendDataToBackend("delete", { 
+                                rowId: clickInfo.event.extendedProps.rowId 
+                            });
+                        }
+                    }
+                }
+            });
+            calendar.render();
+        }
+
+        // --- 9. ฟังก์ชันส่งข้อมูลกลับไปที่ Apps Script (doPost) ---
+        async function sendDataToBackend(action, eventData) {
+            if (!currentUserId) {
+                alert("ไม่พบ User ID ไม่สามารถบันทึกได้");
+                return;
+            }
+
+            try {
+                const response = await fetch(WEB_APP_URL, {
+                    method: "POST",
+                    mode: 'no-cors', // (อาจจำเป็นสำหรับ Apps Script ในบางกรณี)
+                    body: JSON.stringify({
+                        userId: currentUserId, // ส่ง "กุญแจ" ยืนยันตัวตน
+                        action: action,        
+                        event: eventData       
+                    })
+                });
+                
+                // หลังจากการ Post, Apps Script จะตอบกลับมา
+                // เราต้องรอสักครู่ แล้วโหลดข้อมูลใหม่เพื่อให้ปฏิทินอัปเดต
+                alert("กำลังบันทึกข้อมูล..."); // แจ้งเตือนผู้ใช้
+                setTimeout(() => {
+                    calendar.refetchEvents(); // สั่งให้ปฏิทินโหลดข้อมูลใหม่
+                }, 1500); // หน่วงเวลาเล็กน้อยเพื่อให้ Sheet บันทึกทัน
+
+            } catch (err) {
+                console.error("Fetch Error:", err);
+                alert("ไม่สามารถติดต่อเซิร์ฟเวอร์เพื่อบันทึกได้");
+            }
+        }
+
+        // --- 10. เริ่มระบบ ---
+        initializeLiff(); 
+    </script>
+</body>
+</html>
