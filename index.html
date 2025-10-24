@@ -38,6 +38,7 @@ HTML
                 }
                 const profile = await liff.getProfile();
                 currentUserId = profile.userId; // เก็บ UserID ไว้เช็กสิทธิ์
+                alert('My User ID is: ' + currentUserId); //
                 
                 // เมื่อยืนยันตัวตนสำเร็จ ค่อยวาดปฏิทิน
                 initializeCalendar(); 
@@ -149,3 +150,4 @@ HTML
     </script>
 </body>
 </html>
+
